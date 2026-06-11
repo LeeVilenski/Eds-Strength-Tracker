@@ -797,14 +797,33 @@ function ChallengeToast({challenge,onDismiss}){
   );
 }
 
-function ToastStack({pbs,xpGain,challengeDone,allExercises,muscleGroups,onDismissPbs,onDismissXp,onDismissChallenge}){
+function StravaSyncToast({error,onDismiss}){
+  useEffect(()=>{if(error){const t=setTimeout(onDismiss,8000);return()=>clearTimeout(t);}},[error]);
+  if(!error)return null;
+  return(
+    <div style={{background:"#111827",color:"#fff",borderRadius:12,padding:"12px 20px",boxShadow:"0 8px 24px rgba(0,0,0,0.2)",display:"flex",gap:10,alignItems:"center",width:"100%"}}>
+      <span style={{fontSize:20}}>⚠️</span>
+      <div>
+        <div style={{fontSize:13,fontWeight:"700"}}>Couldn't sync to Strava</div>
+        <div style={{fontSize:12,color:"#d1d5db",marginTop:2}}>
+          {error.includes("authenticated")||error.includes("403")
+            ? <>Reconnect Strava to allow description updates — <a href="/api/auth/login" style={{color:"#fb923c"}}>reconnect</a></>
+            : "Saved locally, but the Strava activity description wasn't updated."}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToastStack({pbs,xpGain,challengeDone,stravaError,allExercises,muscleGroups,onDismissPbs,onDismissXp,onDismissChallenge,onDismissStrava}){
   const showXp=xpGain&&(xpGain.totalXp>0||xpGain.levelUps.length>0);
-  if(!pbs.length&&!showXp&&!challengeDone)return null;
+  if(!pbs.length&&!showXp&&!challengeDone&&!stravaError)return null;
   return(
     <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:1000,display:"flex",flexDirection:"column",gap:10,width:"90%",maxWidth:340}}>
       <PBToast pbs={pbs} allExercises={allExercises} onDismiss={onDismissPbs}/>
       <XpToast gain={xpGain} muscleGroups={muscleGroups} onDismiss={onDismissXp}/>
       <ChallengeToast challenge={challengeDone} onDismiss={onDismissChallenge}/>
+      <StravaSyncToast error={stravaError} onDismiss={onDismissStrava}/>
     </div>
   );
 }
@@ -1085,6 +1104,7 @@ export default function App(){
   const [pbs,setPbs]=useState([]);
   const [xpGain,setXpGain]=useState(null);
   const [challengeDone,setChallengeDone]=useState(null);
+  const [stravaError,setStravaError]=useState(null);
   const [manualSessions,setManualSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem("manual_sessions_v1")||"[]");}catch{return [];}});
   const [showLogManual,setShowLogManual]=useState(false);
   const [expandedMuscle,setExpandedMuscle]=useState(null);
@@ -1161,7 +1181,8 @@ export default function App(){
   async function saveNotesFixed(activityId){
     const newPBs=detectPBs(enrichForm.exercises,notes,activityId);
     setSaving(true);
-    await fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:activityId,notes:enrichForm})});
+    const syncRes=await fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:activityId,notes:enrichForm})}).then(r=>r.json()).catch(()=>null);
+    if(syncRes?.stravaError)setStravaError(syncRes.stravaError);
     const updatedNotes={...notes,[activityId]:enrichForm};
     const before=computeMuscleStats(notes,allStrength,allExercises);
     const after=computeMuscleStats(updatedNotes,allStrength,allExercises);
@@ -1426,7 +1447,7 @@ export default function App(){
 
       </div>
     </div>
-    <ToastStack pbs={pbs} xpGain={xpGain} challengeDone={challengeDone} allExercises={allExercises} muscleGroups={allMuscleGroups} onDismissPbs={()=>setPbs([])} onDismissXp={()=>setXpGain(null)} onDismissChallenge={()=>setChallengeDone(null)}/>
+    <ToastStack pbs={pbs} xpGain={xpGain} challengeDone={challengeDone} stravaError={stravaError} allExercises={allExercises} muscleGroups={allMuscleGroups} onDismissPbs={()=>setPbs([])} onDismissXp={()=>setXpGain(null)} onDismissChallenge={()=>setChallengeDone(null)} onDismissStrava={()=>setStravaError(null)}/>
     {showLogManual&&<LogManualModal allExercises={allExercises} onSave={saveManualSession} onClose={()=>setShowLogManual(false)}/>}
     {showAddMuscle&&<AddMuscleModal onSave={addCustomMuscle} onClose={()=>setShowAddMuscle(false)}/>}
     {showAddExercise&&<AddExerciseModal allMuscleGroups={allMuscleGroups} onSave={addCustomExercise} onClose={()=>setShowAddExercise(false)}/>}
