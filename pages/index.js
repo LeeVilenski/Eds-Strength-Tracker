@@ -16,7 +16,23 @@ const COLOR_OPTIONS = [
 function slugify(s){return s.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");}
 function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m`;}
 function fmtDuration(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}min`;}
+function fmtPace(minKm){if(!minKm||isNaN(minKm))return "—";const m=Math.floor(minKm);const s=Math.round((minKm-m)*60);return `${m}:${String(s).padStart(2,"0")}/km`;}
 function dayLabel(d){if(!d)return "";return new Date(d+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});}
+function monthLabel(monthKey){const [y,m]=monthKey.split("-").map(Number);return new Date(y,m-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});}
+
+// Group runs by calendar month -> [{key:"YYYY-MM", km, durationSec, pace, count}], most recent first
+function groupRunsByMonth(runs){
+  const map={};
+  for(const r of runs){
+    if(!r.date) continue;
+    const key=r.date.slice(0,7);
+    if(!map[key]) map[key]={key,km:0,durationSec:0,count:0};
+    map[key].km+=r.distance/1000;
+    map[key].durationSec+=r.duration;
+    map[key].count++;
+  }
+  return Object.values(map).map(m=>({...m,pace:m.km>0?(m.durationSec/60)/m.km:null})).sort((a,b)=>b.key.localeCompare(a.key));
+}
 function hrColor(hr){if(!hr)return "#9ca3af";if(hr<120)return "#16a34a";if(hr<140)return "#65a30d";if(hr<160)return "#d97706";if(hr<175)return "#ea580c";return "#dc2626";}
 function isStrengthType(t){return["WeightTraining","Workout","Crossfit","HighIntensityIntervalTraining","Yoga","Pilates","RockClimbing"].includes(t);}
 function daysAgo(d){if(!d)return null;return Math.floor((new Date()-new Date(d+"T12:00:00"))/86400000);}
@@ -195,8 +211,6 @@ function RunStatsPanel({runs}){
   const firstPace=paces[0];
   const paceImproved=latestPace&&firstPace&&latestPace<firstPace;
 
-  function fmtPace(minKm){if(!minKm||isNaN(minKm))return "—";const m=Math.floor(minKm);const s=Math.round((minKm-m)*60);return `${m}:${String(s).padStart(2,"0")}/km`;}
-
   // Best effort run (highest relative_effort)
   const bestEffort=[...runs].sort((a,b)=>(b.effort||0)-(a.effort||0))[0];
   // Longest run
@@ -297,6 +311,80 @@ function StrengthStatsPanel({strength}){
       )}
     </div>
   );
+}
+
+// ── Runs tab: YTD/all-time stats, monthly breakdown, run list linking out to Strava ──
+function RunsTab({runs}){
+  if(runs.length===0)return(
+    <div style={{...S.card,color:C.textMuted,fontSize:14,textAlign:"center",padding:"40px 16px"}}>No runs yet.</div>
+  );
+
+  const sortedRuns=[...runs].sort((a,b)=>b.date.localeCompare(a.date));
+  const totalRunKm=runs.reduce((acc,r)=>acc+r.distance/1000,0);
+  const totalRunSec=runs.reduce((acc,r)=>acc+r.duration,0);
+  const overallPace=totalRunKm>0?(totalRunSec/60)/totalRunKm:null;
+
+  const currentYear=new Date().getFullYear();
+  const ytdRuns=runs.filter(r=>r.date?.startsWith(String(currentYear)));
+  const ytdKm=ytdRuns.reduce((acc,r)=>acc+r.distance/1000,0);
+  const ytdSec=ytdRuns.reduce((acc,r)=>acc+r.duration,0);
+  const ytdPace=ytdKm>0?(ytdSec/60)/ytdKm:null;
+
+  const monthly=groupRunsByMonth(runs).slice(0,12);
+  const maxMonthKm=Math.max(...monthly.map(m=>m.km),1);
+
+  const statCard=(value,label,color=C.textSecondary)=>(
+    <div style={S.statCard}>
+      <div style={{fontSize:18,fontWeight:"700",color}}>{value}</div>
+      <div style={{fontSize:11,color:C.textMuted,marginTop:4,fontWeight:"500"}}>{label}</div>
+    </div>
+  );
+
+  return(<>
+    <div style={S.sectionLabel}>{currentYear} so far</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+      {statCard(<>{ytdKm.toFixed(0)}<span style={{fontSize:12,fontWeight:"500"}}> km</span></>,"YTD distance",C.orange)}
+      {statCard(fmtDuration(ytdSec),"YTD time")}
+      {statCard(fmtPace(ytdPace),"YTD avg pace")}
+    </div>
+
+    <div style={S.sectionLabel}>All time</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+      {statCard(runs.length,"Total runs",C.orange)}
+      {statCard(<>{totalRunKm.toFixed(0)}<span style={{fontSize:12,fontWeight:"500"}}> km</span></>,"Total distance")}
+      {statCard(fmtPace(overallPace),"Avg pace")}
+    </div>
+
+    {monthly.length>0&&(<>
+      <div style={S.sectionLabel}>By month</div>
+      <div style={S.card}>
+        {monthly.map((m,idx)=>(
+          <div key={m.key} style={{marginBottom:idx<monthly.length-1?10:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3,gap:8}}>
+              <span style={{fontSize:13,color:C.text,fontWeight:"500",whiteSpace:"nowrap"}}>{monthLabel(m.key)}</span>
+              <span style={{fontSize:12,color:C.textMuted,whiteSpace:"nowrap"}}>{m.km.toFixed(1)}km · {fmtDuration(m.durationSec)} · {fmtPace(m.pace)}</span>
+            </div>
+            <div style={{height:6,background:C.bg,borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${Math.max(2,(m.km/maxMonthKm)*100)}%`,background:C.orange,borderRadius:3}}/>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>)}
+
+    <div style={S.sectionLabel}>Runs ({runs.length} total · {totalRunKm.toFixed(0)}km)</div>
+    <div style={S.card}>
+      {sortedRuns.map((r,idx)=>(
+        <a key={r.id} href={`https://www.strava.com/activities/${r.id}`} target="_blank" rel="noopener noreferrer"
+          style={{display:"flex",gap:12,alignItems:"center",textDecoration:"none",color:"inherit",borderBottom:idx<sortedRuns.length-1?`1px solid ${C.border}`:"none",paddingBottom:idx<sortedRuns.length-1?12:0,marginBottom:idx<sortedRuns.length-1?12:0}}>
+          <div style={{width:36,height:36,borderRadius:8,background:C.orangeLight,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>🏃</div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,color:C.text,fontWeight:"500",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</div><div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{dayLabel(r.date)}{r.avg_hr&&<span style={{color:hrColor(r.avg_hr),marginLeft:8,fontWeight:"500"}}>♥ {Math.round(r.avg_hr)}</span>}</div></div>
+          <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,color:C.orange,fontWeight:"600"}}>{fmtDist(r.distance)}</div><div style={{fontSize:12,color:C.textMuted}}>{fmtDuration(r.duration)}</div>{r.elevation>0&&<div style={{fontSize:11,color:C.textFaint}}>↑{Math.round(r.elevation)}m</div>}</div>
+          <div style={{flexShrink:0,color:C.textFaint,fontSize:14}}>↗</div>
+        </a>
+      ))}
+    </div>
+  </>);
 }
 
 // ── Exercise picker: searchable dropdown ──
@@ -1051,7 +1139,6 @@ export default function App(){
 
   const allStrength=[...strength,...manualSessions].sort((a,b)=>b.date.localeCompare(a.date));
   const sortedStrength=allStrength;
-  const sortedRuns=[...runs].sort((a,b)=>b.date.localeCompare(a.date));
   const timeline=[...runs,...allStrength].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,25);
   const totalRunKm=runs.reduce((acc,r)=>acc+r.distance/1000,0);
   const lastStr=sortedStrength[0];
@@ -1241,18 +1328,7 @@ export default function App(){
           })}
         </>)}
 
-        {view==="runs"&&(<>
-          <div style={S.sectionLabel}>Runs ({runs.length} total · {totalRunKm.toFixed(0)}km)</div>
-          <div style={S.card}>
-            {sortedRuns.map((r,idx)=>(
-              <div key={r.id} style={{display:"flex",gap:12,alignItems:"center",borderBottom:idx<sortedRuns.length-1?`1px solid ${C.border}`:"none",paddingBottom:idx<sortedRuns.length-1?12:0,marginBottom:idx<sortedRuns.length-1?12:0}}>
-                <div style={{width:36,height:36,borderRadius:8,background:C.orangeLight,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>🏃</div>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,color:C.text,fontWeight:"500",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</div><div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{dayLabel(r.date)}{r.avg_hr&&<span style={{color:hrColor(r.avg_hr),marginLeft:8,fontWeight:"500"}}>♥ {Math.round(r.avg_hr)}</span>}</div></div>
-                <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,color:C.orange,fontWeight:"600"}}>{fmtDist(r.distance)}</div><div style={{fontSize:12,color:C.textMuted}}>{fmtDuration(r.duration)}</div>{r.elevation>0&&<div style={{fontSize:11,color:C.textFaint}}>↑{Math.round(r.elevation)}m</div>}</div>
-              </div>
-            ))}
-          </div>
-        </>)}
+        {view==="runs"&&<RunsTab runs={runs}/>}
 
       </div>
     </div>
