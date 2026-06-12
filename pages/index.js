@@ -1356,6 +1356,30 @@ export default function App(){
     load();
   },[]);
 
+  // Once a manual session's pushed activity syncs back from Strava, migrate its
+  // exercise notes onto the real activity id and drop the local manual copy so
+  // it stops appearing as a duplicate session.
+  useEffect(()=>{
+    const pushedIds=new Set(strength.map(a=>String(a.id)));
+    const toMigrate=manualSessions.filter(s=>s.stravaActivityId&&pushedIds.has(String(s.stravaActivityId)));
+    if(toMigrate.length===0)return;
+    (async ()=>{
+      const updatedNotes={...notes};
+      for(const s of toMigrate){
+        const noteData=updatedNotes[s.id];
+        if(noteData&&!updatedNotes[s.stravaActivityId]){
+          updatedNotes[s.stravaActivityId]=noteData;
+          await fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:s.stravaActivityId,notes:noteData})});
+        }
+      }
+      setNotes(updatedNotes);
+      const migratedIds=new Set(toMigrate.map(s=>s.id));
+      const remaining=manualSessions.filter(s=>!migratedIds.has(s.id));
+      setManualSessions(remaining);
+      try { localStorage.setItem("manual_sessions_v1", JSON.stringify(remaining)); } catch {}
+    })();
+  },[strength, manualSessions]);
+
   async function forceSync() {
     setSyncing(true);
     try {
@@ -1485,7 +1509,8 @@ export default function App(){
     if(!draft.isTemplate)deleteDraft(draft.id);
   }
 
-  const allStrength=[...strength,...manualSessions].sort((a,b)=>b.date.localeCompare(a.date));
+  const pushedStravaIds=new Set(strength.map(a=>String(a.id)));
+  const allStrength=[...strength,...manualSessions.filter(s=>!(s.stravaActivityId&&pushedStravaIds.has(String(s.stravaActivityId))))].sort((a,b)=>b.date.localeCompare(a.date));
   const sortedStrength=allStrength;
   const timeline=[...runs,...allStrength].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,25);
   const totalRunKm=runs.reduce((acc,r)=>acc+r.distance/1000,0);
