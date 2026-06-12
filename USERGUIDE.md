@@ -12,12 +12,17 @@ The header has five tabs: **dashboard**, **muscles**, **progress**, **strength**
 
 ## PIN lock for Strava-writing actions
 
-If `APP_PIN` is set (in Vercel env vars), the two actions that actually change something on Strava — **Push to Strava** and renaming an activity (the editable title on a session) — are gated behind a PIN prompt.
+If `APP_PIN` is set (in Vercel env vars), every action that actually changes something on Strava is gated behind a PIN prompt:
 
-- The first time either is used in a browser session, a bottom-sheet asks for the PIN.
+- **Push to Strava** (creates a new Strava activity)
+- Renaming an activity (the editable title on a session — updates the Strava activity's name)
+- Saving an exercise breakdown / sets+reps/notes on a **synced** session (updates that activity's Strava description)
+
+- The first time any of these is used in a browser session, a bottom-sheet asks for the PIN.
 - A correct PIN is remembered for the rest of that browser session (`sessionStorage`) — no need to re-enter it every time.
 - A **🔓 Lock Strava** button appears in the header while unlocked; tap it to re-lock before handing the device to someone else (e.g. when demoing the app).
-- Everything else — viewing data, opening Strava links, editing exercise breakdowns/notes, drafts/templates, custom exercises, removing cached sessions — is unaffected, since none of that writes to Strava.
+- Editing the exercise breakdown on a **manual** session that hasn't been pushed to Strava yet is never PIN-gated — it's local-only until you push it.
+- Everything else — viewing data, opening Strava links, drafts/templates, custom exercises, removing cached sessions — is unaffected, since none of that writes to Strava.
 - If `APP_PIN` isn't set, none of this appears and these actions behave as before.
 
 ---

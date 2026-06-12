@@ -158,7 +158,7 @@ For your sessions to appear in the tracker automatically, record them on your Ga
 - **CrossFit**
 - **HIIT**
 
-Once the activity syncs to Strava, it will appear automatically in the app. Tap **+ add exercise breakdown** on the session to log your sets, reps and weight.
+Once the activity syncs to Strava, it will appear automatically in the app. Tap **+ add exercise breakdown** on the session to log your sets, reps and weight — this also writes the breakdown into that activity's Strava description, so it's PIN-protected if you've set `APP_PIN` (see Step 5).
 
 ### Logging a session manually
 
@@ -175,7 +175,7 @@ Manually logged sessions can include heart rate data in two ways:
 
 If a manually logged session has an exercise breakdown and/or imported HR data, you can tap **Push to Strava** on it to create a real Strava activity for it. This builds a `.fit` file containing your sets (reps/weight per exercise) and, if you imported one, the full heart rate stream — so the Strava activity shows both the Strength Training set breakdown and an HR graph. Once pushed, the session is linked to its new Strava activity and won't be duplicated.
 
-If you've set `APP_PIN` (see Step 5), the first time you push a session or rename an activity in a browser session you'll be asked for the PIN. Enter it once and it's remembered for the rest of that browser session — handy if you want to demo the app to someone without letting them write to your Strava account. A **🔓 Lock Strava** button appears in the header once unlocked, so you can re-lock it before handing the device over.
+If you've set `APP_PIN` (see Step 5), the first time you push a session, rename an activity, or save an exercise breakdown on a synced session in a browser session, you'll be asked for the PIN — all three write to Strava (a new activity, an activity's name, or its description). Enter it once and it's remembered for the rest of that browser session — handy if you want to demo the app to someone without letting them write to your Strava account. A **🔓 Lock Strava** button appears in the header once unlocked, so you can re-lock it before handing the device over. Editing breakdowns on **manual** sessions that haven't been pushed yet is always PIN-free, since nothing on Strava changes.
 
 ### Removing old sessions
 

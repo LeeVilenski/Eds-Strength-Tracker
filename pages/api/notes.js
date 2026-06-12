@@ -1,6 +1,7 @@
 import { getAllExerciseNotes, saveExerciseNotes, getCustomExercises, getStravaActivity, updateStravaActivityDescription } from "../../lib/db";
 import { EXERCISE_LIBRARY } from "../../lib/exercises";
 import { buildExerciseBlock, mergeDescription } from "../../lib/description";
+import { pinOk } from "../../lib/pin";
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
@@ -12,17 +13,26 @@ export default async function handler(req, res) {
     }
   } else if (req.method === "POST") {
     try {
-      const { activity_id, notes } = req.body;
+      const { activity_id, notes, pin } = req.body;
       if (!activity_id || !notes) {
         return res.status(400).json({ error: "activity_id and notes required" });
       }
+
+      // Synced Strava activities get their description updated below, so this
+      // whole save is PIN-gated. Manual sessions (non-numeric ids) are local
+      // only and don't require a PIN.
+      const isStravaActivity = /^\d+$/.test(String(activity_id));
+      if (isStravaActivity && !pinOk(pin)) {
+        return res.status(401).json({ error: "Incorrect PIN", pinRequired: true });
+      }
+
       await saveExerciseNotes(activity_id, notes);
 
       // Mirror the exercise breakdown into the Strava activity's description.
       // Manual (locally-logged) sessions have no corresponding Strava activity.
       let stravaSynced = false;
       let stravaError = null;
-      if (/^\d+$/.test(String(activity_id))) {
+      if (isStravaActivity) {
         try {
           const customExercises = await getCustomExercises();
           const allExercises = [...EXERCISE_LIBRARY, ...customExercises];

@@ -1440,7 +1440,7 @@ export default function App(){
         const noteData=updatedNotes[s.id];
         if(noteData&&!updatedNotes[s.stravaActivityId]){
           updatedNotes[s.stravaActivityId]=noteData;
-          await fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:s.stravaActivityId,notes:noteData})});
+          await fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:s.stravaActivityId,notes:noteData,pin:getStravaPin()||""})});
         }
       }
       setNotes(updatedNotes);
@@ -1552,10 +1552,19 @@ export default function App(){
     if(res?.error) setStravaError(res.error);
   }
 
-  async function saveNotesFixed(activityId){
+  async function saveNotesFixed(activityId, pinOverride){
     const newPBs=detectPBs(enrichForm.exercises,notes,activityId);
+    const needsPin=/^\d+$/.test(String(activityId));
+    const pin=needsPin?(pinOverride??getStravaPin()??""):"";
     setSaving(true);
-    const syncRes=await fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:activityId,notes:enrichForm})}).then(r=>r.json()).catch(()=>null);
+    const syncRes=await fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:activityId,notes:enrichForm,pin})}).then(r=>r.json()).catch(()=>null);
+    if(syncRes?.pinRequired){
+      setSaving(false);
+      lockStrava();
+      setPinPrompt({error:pin?"Incorrect PIN":null, retry:newPin=>saveNotesFixed(activityId,newPin)});
+      return;
+    }
+    if(pin)unlockStrava(pin);
     if(syncRes?.stravaError)setStravaError(syncRes.stravaError);
     const updatedNotes={...notes,[activityId]:enrichForm};
     const before=computeMuscleStats(notes,allStrength,allExercises);
