@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import Head from "next/head";
-import { MUSCLE_GROUPS as BUILTIN_MUSCLE_GROUPS, computeMuscleStats, diffMuscleStats, detectPBs, generateMonthlyChallenge, computeChallengeProgress, xpForExercise, totalRepsFromValue, bestWeightFromValue, summariseSets, BODY_GROUP, BODY_DECAY_GRACE_DAYS, CHALLENGE_BONUS_XP } from "../lib/game";
+import { MUSCLE_GROUPS as BUILTIN_MUSCLE_GROUPS, computeMuscleStats, diffMuscleStats, detectPBs, generateMonthlyChallenge, computeChallengeProgress, xpForExercise, totalRepsFromValue, bestWeightFromValue, summariseSets, BODY_GROUP, BODY_DECAY_GRACE_DAYS, DECAY_GRACE_DAYS, CHALLENGE_BONUS_XP } from "../lib/game";
 import { EXERCISE_LIBRARY, EXERCISE_CATEGORIES, getExercisesByCategory } from "../lib/exercises";
 import BodyMap from "../components/BodyMap";
 
@@ -628,19 +628,21 @@ function SetsInput({exercise, value, onChange, notes, activityId}){
 
 // ── Muscle card ──
 function MuscleCard({mgId,stats,muscleGroups,allExercises,notes,strength,expanded,onExpand}){
-  const mg=muscleGroups[mgId];if(!mg)return null;
+  const isBody=mgId==="body";
+  const mg=isBody?BODY_GROUP:muscleGroups[mgId];if(!mg)return null;
   const s=stats[mgId]||{level:0,currentXp:0,xpNeeded:160,effectiveXp:0,lastTrained:null,streak:0,multiplier:1};
   const pct=Math.min(100,Math.round((s.currentXp/s.xpNeeded)*100));
   const da=daysAgo(s.lastTrained);
   const streak=s.streak||0;
   const mult=s.multiplier||1;
+  const decayGrace=isBody?BODY_DECAY_GRACE_DAYS:DECAY_GRACE_DAYS;
   const xpHistory=strength.filter(act=>notes[act.id]?.exercises).map(act=>{
     const exNotes=notes[act.id].exercises;let sessionXp=0;const contributions=[];
     for(const [exId,value] of Object.entries(exNotes)){
       if(!value)continue;
       const muscles=allExercises.find(e=>e.id===exId)?.muscles||[];
-      if(!muscles.includes(mgId))continue;
-      const isPrimary=muscles[0]===mgId;
+      if(!isBody&&!muscles.includes(mgId))continue;
+      const isPrimary=isBody?true:muscles[0]===mgId;
       const xp=Math.round(xpForExercise(exId,value)*(isPrimary?1:0.4));
       if(xp>0){sessionXp+=xp;contributions.push({exId,value,xp,isPrimary,label:allExercises.find(e=>e.id===exId)?.label||exId});}
     }
@@ -660,7 +662,7 @@ function MuscleCard({mgId,stats,muscleGroups,allExercises,notes,strength,expande
               <div style={{fontSize:14,fontWeight:"600",color:C.text}}>{mg.label}</div>
               <div style={{fontSize:11,color:C.textMuted,marginTop:1}}>
                 {s.lastTrained?(da===0?"Trained today":`${da}d ago`):"Never trained"}
-                {da!==null&&da>14&&<span style={{color:C.red,marginLeft:6,fontWeight:"500"}}>⚠ Decaying</span>}
+                {da!==null&&da>decayGrace&&<span style={{color:C.red,marginLeft:6,fontWeight:"500"}}>⚠ Decaying</span>}
               </div>
             </div>
           </div>
@@ -698,7 +700,7 @@ function MuscleCard({mgId,stats,muscleGroups,allExercises,notes,strength,expande
             </div>
           )}
           <div style={{fontSize:11,color:C.textMuted,fontWeight:"600",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>XP History</div>
-          {xpHistory.length===0?<div style={{fontSize:13,color:C.textFaint}}>No logged exercises for this muscle yet.</div>
+          {xpHistory.length===0?<div style={{fontSize:13,color:C.textFaint}}>{isBody?"No logged exercises yet.":"No logged exercises for this muscle yet."}</div>
           :xpHistory.map((h,i)=>(
             <div key={i} style={{marginBottom:10,background:C.surface,borderRadius:8,padding:"10px 12px",border:`1px solid ${C.border}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
@@ -815,37 +817,6 @@ function ChallengeCard({challenge,notes,strength}){
             </div>
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Overall ("body") level card — fed by all training, decays fast ──
-function OverallLevelCard({stats}){
-  const s=stats.body||{level:0,currentXp:0,xpNeeded:160,effectiveXp:0,lastTrained:null};
-  const pct=Math.min(100,Math.round((s.currentXp/s.xpNeeded)*100));
-  const da=daysAgo(s.lastTrained);
-  return(
-    <div style={{background:BODY_GROUP.lightBg,border:`1px solid ${BODY_GROUP.border}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:38,height:38,borderRadius:10,background:"#fff",border:`1px solid ${BODY_GROUP.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{BODY_GROUP.emoji}</div>
-          <div>
-            <div style={{fontSize:14,fontWeight:"600",color:C.text}}>{BODY_GROUP.label} Level</div>
-            <div style={{fontSize:11,color:C.textMuted,marginTop:1}}>
-              {s.lastTrained?(da===0?"Trained today":`${da}d ago`):"Never trained"}
-              {da!==null&&da>BODY_DECAY_GRACE_DAYS&&<span style={{color:C.red,marginLeft:6,fontWeight:"500"}}>⚠ Decaying fast</span>}
-            </div>
-          </div>
-        </div>
-        <div style={{fontSize:22,fontWeight:"700",color:BODY_GROUP.color}}>Lv {s.level}</div>
-      </div>
-      <div style={{background:"#fff",borderRadius:99,height:8,overflow:"hidden"}}>
-        <div style={{height:"100%",background:BODY_GROUP.color,borderRadius:99,width:`${pct}%`,transition:"width 0.5s"}}/>
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:5}}>
-        <span style={{fontSize:11,color:C.textFaint}}>{s.currentXp} / {s.xpNeeded} XP to next level</span>
-        <span style={{fontSize:11,color:C.textFaint}}>{s.effectiveXp} total XP</span>
       </div>
     </div>
   );
@@ -1770,11 +1741,11 @@ export default function App(){
       <div style={S.body}>
 
         {view==="dashboard"&&(<>
+          {/* Overall ("body") level — fed by all training, decays fast */}
+          <MuscleCard mgId="body" stats={muscleStats} muscleGroups={allMuscleGroups} allExercises={allExercises} notes={notes} strength={sortedStrength} expanded={expandedMuscle==="body"} onExpand={()=>setExpandedMuscle(expandedMuscle==="body"?null:"body")}/>
+
           {/* Monthly challenge — top of dashboard */}
           <ChallengeCard challenge={challenge} notes={notes} strength={[...strength,...manualSessions]}/>
-
-          {/* Overall ("body") level — fed by all training, decays fast */}
-          <OverallLevelCard stats={muscleStats}/>
 
           {/* Past challenges history */}
           <PastChallengesSection monthlyChallenges={monthlyChallenges} currentMonthKey={monthKey} notes={notes} strength={[...strength,...manualSessions]} expanded={showPastChallenges} onToggle={()=>setShowPastChallenges(!showPastChallenges)}/>
