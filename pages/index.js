@@ -828,6 +828,19 @@ function ToastStack({pbs,xpGain,challengeDone,stravaError,allExercises,muscleGro
   );
 }
 
+function EditableTitle({value,onSave}){
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState(value);
+  useEffect(()=>{setDraft(value);},[value]);
+  if(editing){
+    return <input autoFocus value={draft} onChange={e=>setDraft(e.target.value)}
+      onBlur={()=>{setEditing(false);const trimmed=draft.trim();if(trimmed&&trimmed!==value)onSave(trimmed);else setDraft(value);}}
+      onKeyDown={e=>{if(e.key==="Enter")e.target.blur();if(e.key==="Escape"){setDraft(value);setEditing(false);}}}
+      style={{fontSize:15,fontWeight:"600",color:C.text,background:C.bg,border:`1px solid ${C.blueBorder}`,borderRadius:6,padding:"1px 5px",fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>;
+  }
+  return <div onClick={()=>setEditing(true)} title="Click to rename" style={{fontSize:15,fontWeight:"600",color:C.text,cursor:"pointer"}}>{value}</div>;
+}
+
 function ExercisePills({notes,onEdit,allExercises}){
   const entries=Object.entries(notes.exercises||{}).filter(([,v])=>v&&(typeof v==="object"?v.sets?.some(s=>s.reps):true));
   return(
@@ -1331,6 +1344,20 @@ export default function App(){
     }
   }
 
+  async function renameSession(session, newName) {
+    if(session.isManual){
+      const updated = manualSessions.map(s=>s.id===session.id?{...s,name:newName}:s);
+      setManualSessions(updated);
+      try { localStorage.setItem("manual_sessions_v1", JSON.stringify(updated)); } catch {}
+      if(!session.stravaActivityId) return;
+    } else {
+      setStrength(strength.map(s=>s.id===session.id?{...s,name:newName}:s));
+    }
+    const activityId = session.isManual ? session.stravaActivityId : session.id;
+    const res = await fetch("/api/rename",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({activity_id:activityId,name:newName})}).then(r=>r.json()).catch(e=>({error:e.message}));
+    if(res?.error) setStravaError(res.error);
+  }
+
   async function saveNotesFixed(activityId){
     const newPBs=detectPBs(enrichForm.exercises,notes,activityId);
     setSaving(true);
@@ -1622,7 +1649,7 @@ export default function App(){
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{fontSize:15,fontWeight:"600",color:C.text}}>{s.name}</div>
+                    <div style={{flex:1,minWidth:0}}><EditableTitle value={s.name} onSave={(newName)=>renameSession(s,newName)}/></div>
                     {s.isManual&&<span style={{fontSize:10,background:C.blueLight,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:"1px 7px",fontWeight:"600",flexShrink:0}}>Manual</span>}
                   </div>
                   <div style={{fontSize:12,color:C.textMuted,marginTop:3}}>{dayLabel(s.date)}{(!s.isManual||s.stravaActivityId)&&<a href={`https://www.strava.com/activities/${s.isManual?s.stravaActivityId:s.id}`} target="_blank" rel="noopener noreferrer" style={{marginLeft:8,color:C.textFaint,textDecoration:"none"}}>↗ Strava</a>}</div>
