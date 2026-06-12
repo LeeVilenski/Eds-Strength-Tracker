@@ -43,7 +43,6 @@ const DISTANCE_BUCKETS=[
   {label:"1 Mile",         meters:1609},
   {label:"2 Mile",         meters:3219},
   {label:"5K",             meters:5000},
-  {label:"5 Mile",         meters:8047},
   {label:"10K",            meters:10000},
   {label:"15K",            meters:15000},
   {label:"Half Marathon",  meters:21098},
