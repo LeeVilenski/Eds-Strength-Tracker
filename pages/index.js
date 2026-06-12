@@ -1091,6 +1091,9 @@ function LogManualModal({allExercises, onSave, onClose}){
   const [durationSec, setDurationSec] = useState("");
   const [avgHr, setAvgHr] = useState("");
   const [maxHr, setMaxHr] = useState("");
+  const [calories, setCalories] = useState(0);
+  const [hrRecords, setHrRecords] = useState(null);
+  const [fitImportStatus, setFitImportStatus] = useState("");
   const [exercises, setExercises] = useState({});
   const [sessionNotes, setSessionNotes] = useState("");
   const [showPicker, setShowPicker] = useState(false);
@@ -1098,6 +1101,30 @@ function LogManualModal({allExercises, onSave, onClose}){
   function addExercise(ex){ setExercises(e=>({...e,[ex.id]:{sets:[{reps:"",weight:"",weightUnit:"kg"}]}})); setShowPicker(false); }
   function removeExercise(id){ const e={...exercises}; delete e[id]; setExercises(e); }
   function updateExercise(id, val){ setExercises(e=>({...e,[id]:val})); }
+
+  function handleFitFile(e){
+    const file=e.target.files?.[0];
+    if(!file) return;
+    setFitImportStatus("Reading "+file.name+"…");
+    const reader=new FileReader();
+    reader.onload=async()=>{
+      const fitBase64=reader.result.split(",")[1];
+      try{
+        const res=await fetch("/api/parse-fit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fitBase64})}).then(r=>r.json());
+        if(res.error){ setFitImportStatus("Error: "+res.error); return; }
+        if(res.avgHr) setAvgHr(String(Math.round(res.avgHr)));
+        if(res.maxHr) setMaxHr(String(Math.round(res.maxHr)));
+        if(res.durationSec){ setDurationMin(String(Math.floor(res.durationSec/60))); setDurationSec(String(res.durationSec%60)); }
+        if(res.calories) setCalories(Math.round(res.calories));
+        setHrRecords(res.hrRecords||null);
+        setFitImportStatus(`Imported ${file.name}${res.hrRecords?.length?` — ${res.hrRecords.length} HR samples`:""}`);
+      }catch(err){
+        setFitImportStatus("Error: "+err.message);
+      }
+    };
+    reader.onerror=()=>setFitImportStatus("Couldn't read file");
+    reader.readAsDataURL(file);
+  }
 
   function handleSave(){
     if(!name.trim()) return;
@@ -1107,8 +1134,9 @@ function LogManualModal({allExercises, onSave, onClose}){
       sport_type: "Workout",
       date,
       distance:0, duration:(parseInt(durationMin)||0)*60+(parseInt(durationSec)||0),
-      calories:0, effort:0, avg_hr:parseInt(avgHr)||null, max_hr:parseInt(maxHr)||null, elevation:0,
+      calories, effort:0, avg_hr:parseInt(avgHr)||null, max_hr:parseInt(maxHr)||null, elevation:0,
       isManual: true,
+      ...(hrRecords?{hrRecords}:{}),
     };
     onSave(session, {exercises, sessionNotes});
     onClose();
@@ -1123,6 +1151,12 @@ function LogManualModal({allExercises, onSave, onClose}){
         <div style={{marginBottom:12}}>
           <div style={{fontSize:12,color:C.textMuted,fontWeight:"500",marginBottom:5}}>Session name</div>
           <input style={S.input} placeholder="e.g. Morning pull-ups" value={name} onChange={e=>setName(e.target.value)} autoFocus/>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12,color:C.textMuted,fontWeight:"500",marginBottom:5}}>Import from watch (.fit, optional)</div>
+          <input type="file" accept=".fit" onChange={handleFitFile} style={{...S.input,padding:"8px 12px",cursor:"pointer"}}/>
+          {fitImportStatus&&<div style={{fontSize:11,color:C.textMuted,marginTop:5}}>{fitImportStatus}</div>}
         </div>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
