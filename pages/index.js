@@ -56,6 +56,14 @@ function countRunsByDistance(runs){
     };
   });
 }
+// Fastest runs (by pace) falling within a distance bucket, capped at `limit`
+function topRunsByPace(runs, bucket, next, limit=15){
+  return runs
+    .filter(r=>r.distance>=bucket.meters&&(!next||r.distance<next.meters)&&r.distance>0&&r.duration>0)
+    .map(r=>({...r,pace:(r.duration/60)/(r.distance/1000)}))
+    .sort((a,b)=>a.pace-b.pace)
+    .slice(0,limit);
+}
 // Group strength sessions by calendar month -> [{key:"YYYY-MM", count, durationSec}], most recent first
 function groupStrengthByMonth(sessions){
   const map={};
@@ -350,6 +358,7 @@ function StrengthStatsPanel({strength}){
 
 // ── Runs tab: YTD/all-time stats, monthly breakdown, run list linking out to Strava ──
 function RunsTab({runs}){
+  const [expandedDistance,setExpandedDistance]=useState(null);
   if(runs.length===0)return(
     <div style={{...S.card,color:C.textMuted,fontSize:14,textAlign:"center",padding:"40px 16px"}}>No runs yet.</div>
   );
@@ -393,12 +402,35 @@ function RunsTab({runs}){
 
     <div style={S.sectionLabel}>Run distances</div>
     <div style={{...S.card,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-      {milestones.map(m=>(
-        <div key={m.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",background:m.count>0?C.orangeLight:C.bg,border:`1px solid ${m.count>0?C.orangeBorder:C.border}`,borderRadius:8}}>
-          <span style={{fontSize:13,color:m.count>0?C.text:C.textMuted,fontWeight:"500"}}>{m.label}</span>
-          <span style={{fontSize:16,fontWeight:"700",color:m.count>0?C.orange:C.textFaint}}>{m.count}</span>
-        </div>
-      ))}
+      {milestones.map((m,i)=>{
+        const isOpen=expandedDistance===m.label;
+        const top=isOpen?topRunsByPace(runs,m,DISTANCE_BUCKETS[i+1]):[];
+        return(<div key={m.label} style={{display:"contents"}}>
+          <div onClick={()=>m.count>0&&setExpandedDistance(isOpen?null:m.label)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",background:m.count>0?C.orangeLight:C.bg,border:`1px solid ${isOpen?C.orange:(m.count>0?C.orangeBorder:C.border)}`,borderRadius:8,cursor:m.count>0?"pointer":"default"}}>
+            <span style={{fontSize:13,color:m.count>0?C.text:C.textMuted,fontWeight:"500"}}>{m.label}{m.count>0&&<span style={{marginLeft:6,color:C.textFaint,fontSize:10}}>{isOpen?"▲":"▼"}</span>}</span>
+            <span style={{fontSize:16,fontWeight:"700",color:m.count>0?C.orange:C.textFaint}}>{m.count}</span>
+          </div>
+          {isOpen&&(
+            <div style={{gridColumn:"1 / -1",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px"}}>
+              <div style={{fontSize:11,color:C.textMuted,fontWeight:"600",textTransform:"uppercase",letterSpacing:"0.05em",padding:"8px 0 4px"}}>Fastest {m.label} runs</div>
+              {top.map((r,idx)=>(
+                <a key={r.id} href={`https://www.strava.com/activities/${r.id}`} target="_blank" rel="noopener noreferrer"
+                  style={{display:"flex",gap:10,alignItems:"center",textDecoration:"none",color:"inherit",padding:"6px 0",borderTop:`1px solid ${C.border}`}}>
+                  <span style={{fontSize:11,color:C.textFaint,width:18,flexShrink:0}}>{idx+1}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:C.text,fontWeight:"500",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</div>
+                    <div style={{fontSize:11,color:C.textMuted}}>{dayLabel(r.date)} · {fmtDist(r.distance)}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:13,color:C.orange,fontWeight:"600"}}>{fmtDuration(r.duration)}</div>
+                    <div style={{fontSize:11,color:C.textMuted}}>{fmtPace(r.pace)}</div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>);
+      })}
     </div>
 
     {monthly.length>0&&(<>
