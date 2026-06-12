@@ -35,9 +35,12 @@ function groupRunsByMonth(runs){
   return Object.values(map).map(m=>({...m,pace:m.km>0?(m.durationSec/60)/m.km:null})).sort((a,b)=>b.key.localeCompare(a.key));
 }
 // Distance buckets — each spans from its own distance up to (but not including) the
-// next bucket's distance. The final bucket (Marathon) is open-ended.
+// next bucket's distance. The final bucket (Marathon) is open-ended. Runs under
+// 400m don't fall into any bucket and are ignored.
 const DISTANCE_BUCKETS=[
-  {label:"Under 2 Mile",   meters:0},
+  {label:"400m",           meters:400},
+  {label:"1K",             meters:1000},
+  {label:"1 Mile",         meters:1609},
   {label:"2 Mile",         meters:3219},
   {label:"5K",             meters:5000},
   {label:"5 Mile",         meters:8047},
@@ -61,7 +64,7 @@ function countRunsByDistance(runs){
 // doesn't pull in the server-only db module.
 function normalizeEffortName(s){return String(s||"").toLowerCase().replace(/[\s-]/g,"");}
 // Strava best-effort names (normalized) that have an equivalent in DISTANCE_BUCKETS
-const STRAVA_EFFORT_KEYS=new Set(["2mile","5k","10k","15k","halfmarathon","30k","marathon"]);
+const STRAVA_EFFORT_KEYS=new Set(["400m","1k","1mile","2mile","5k","10k","15k","halfmarathon","30k","marathon"]);
 function hasStravaEffort(bucket){return STRAVA_EFFORT_KEYS.has(normalizeEffortName(bucket.label));}
 // Fastest runs (by pace) falling within a distance bucket, capped at `limit`
 function topRunsByPace(runs, bucket, next, limit=15){
